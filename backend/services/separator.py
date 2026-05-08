@@ -2,6 +2,7 @@ import asyncio
 import re
 from pathlib import Path
 
+import soundfile as sf
 import torch
 import torchaudio
 from demucs.pretrained import get_model
@@ -77,7 +78,11 @@ def _run_demucs(audio_path: str, stems_dir: Path, model_name: str) -> dict[str, 
     model.eval()
     model.to(device)
 
-    wav, sr = torchaudio.load(audio_path, backend="soundfile")
+    # torchaudio nightly routes all loads through torchcodec regardless of
+    # the backend= arg; use soundfile directly to avoid the dependency.
+    wav_np, sr = sf.read(audio_path, dtype="float32", always_2d=True)
+    wav = torch.from_numpy(wav_np.T)  # (samples, ch) → (ch, samples)
+
     if sr != model.samplerate:
         wav = torchaudio.functional.resample(wav, sr, model.samplerate)
     if wav.shape[0] == 1:
@@ -96,7 +101,7 @@ def _run_demucs(audio_path: str, stems_dir: Path, model_name: str) -> dict[str, 
     stem_paths: dict[str, str] = {}
     for i, name in enumerate(model.sources):
         path = str(stems_dir / f"{name}.wav")
-        torchaudio.save(path, sources[i], model.samplerate)
+        sf.write(path, sources[i].numpy().T, model.samplerate)
         stem_paths[name] = path
 
     return stem_paths
