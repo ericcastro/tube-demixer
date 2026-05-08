@@ -77,7 +77,7 @@ def _run_demucs(audio_path: str, stems_dir: Path, model_name: str) -> dict[str, 
     model.eval()
     model.to(device)
 
-    wav, sr = torchaudio.load(audio_path)
+    wav, sr = torchaudio.load(audio_path, backend="soundfile")
     if sr != model.samplerate:
         wav = torchaudio.functional.resample(wav, sr, model.samplerate)
     if wav.shape[0] == 1:

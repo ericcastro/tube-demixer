@@ -1,8 +1,13 @@
+import logging
+
 from fastapi import APIRouter, Depends, BackgroundTasks, HTTPException
 from sqlalchemy.orm import Session
 from typing import List
 
 from database import get_db, SessionLocal
+
+log = logging.getLogger(__name__)
+
 from models.project import Project
 from models.stem import Stem
 from schemas import ProjectCreate, ProjectResponse
@@ -110,6 +115,7 @@ async def _process_project(project_id: str):
         db.commit()
 
     except Exception as e:
+        log.exception("Pipeline failed for project %s", project_id)
         project = db.query(Project).filter(Project.id == project_id).first()
         if project:
             project.status = "error"

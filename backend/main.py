@@ -1,3 +1,4 @@
+import logging
 from contextlib import asynccontextmanager
 from pathlib import Path
 from fastapi import FastAPI
@@ -6,6 +7,11 @@ from fastapi.staticfiles import StaticFiles
 
 from database import create_tables
 from routers.projects import router as projects_router
+
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(levelname)s: [%(name)s] %(message)s",
+)
 
 FRONTEND_DIR = Path(__file__).parent.parent / "frontend"
 DATA_DIR = Path(__file__).parent / "data" / "projects"
