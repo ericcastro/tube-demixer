@@ -21,7 +21,9 @@ _BROWSER_ERR_HINTS = (
 
 def _base_opts(project_dir: Path) -> dict:
     return {
-        "format": "bestvideo[ext=mp4]+bestaudio[ext=m4a]/bestvideo+bestaudio/best",
+        # Let yt-dlp pick the best streams; FFmpeg merges into mp4
+        "format": "bestvideo+bestaudio/best",
+        "merge_output_format": "mp4",
         "outtmpl": str(project_dir / "video.%(ext)s"),
         "noplaylist": True,
         "quiet": True,
