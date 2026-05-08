@@ -10,19 +10,19 @@ from demucs.apply import apply_model as demucs_apply
 
 
 MODELS: dict[str, dict] = {
-    "htdemucs": {
-        "label": "HTDemucs",
-        "description": "DeepExtractV2 — your proven baseline. Fast, great quality.",
-        "stems": ["drums", "bass", "other", "vocals"],
-        "backend": "demucs",
-        "model_name": "htdemucs",
-    },
     "htdemucs_6s": {
         "label": "HTDemucs 6-stem",
         "description": "Same architecture, adds guitar & piano separation.",
         "stems": ["drums", "bass", "other", "vocals", "guitar", "piano"],
         "backend": "demucs",
         "model_name": "htdemucs_6s",
+    },
+    "htdemucs": {
+        "label": "HTDemucs",
+        "description": "DeepExtractV2 — your proven baseline. Fast, great quality.",
+        "stems": ["drums", "bass", "other", "vocals"],
+        "backend": "demucs",
+        "model_name": "htdemucs",
     },
     "htdemucs_ft": {
         "label": "HTDemucs Fine-tuned",
