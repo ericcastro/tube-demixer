@@ -1,0 +1,60 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Tube DeMixer — Mixer</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/css/app.css">
+  <link rel="stylesheet" href="/css/mixer.css">
+</head>
+<body class="mixer-page">
+
+  <header class="app-header">
+    <div class="header-inner">
+      <a href="/" class="btn btn-ghost btn-sm">← Projects</a>
+      <div id="mixer-title" class="mixer-header-title">Loading…</div>
+      <span id="mixer-model" class="model-badge"></span>
+    </div>
+  </header>
+
+  <!-- Loading state -->
+  <div id="loading-state" class="mixer-loading">
+    <div class="spinner"></div>
+    <p id="loading-msg">Loading project…</p>
+  </div>
+
+  <!-- Mixer (hidden until ready) -->
+  <div id="mixer-root" class="mixer-root hidden">
+
+    <!-- Transport bar -->
+    <div class="transport">
+      <button id="play-btn" class="play-btn" aria-label="Play / Pause">▶</button>
+      <span id="time-current" class="transport-time">0:00</span>
+      <div class="seek-wrap">
+        <input type="range" id="seek-bar" class="seek-bar" min="0" max="100" step="0.01" value="0">
+      </div>
+      <span id="time-total" class="transport-time">0:00</span>
+      <label class="speed-label">
+        Speed
+        <select id="speed-select" class="speed-select">
+          <option value="0.5">0.5×</option>
+          <option value="0.75">0.75×</option>
+          <option value="1" selected>1×</option>
+          <option value="1.25">1.25×</option>
+          <option value="1.5">1.5×</option>
+          <option value="2">2×</option>
+        </select>
+      </label>
+    </div>
+
+    <!-- Stem tracks -->
+    <div id="stems-container" class="stems-container"></div>
+
+  </div>
+
+  <script type="module" src="/js/mixer.js"></script>
+</body>
+</html>

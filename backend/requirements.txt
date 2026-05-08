@@ -1,0 +1,17 @@
+fastapi>=0.110.0
+uvicorn[standard]>=0.27.0
+yt-dlp>=2024.1.0
+ffmpeg-python>=0.2.0
+sqlalchemy>=2.0.0
+python-multipart>=0.0.9
+aiofiles>=23.2.1
+pydantic>=2.0.0
+
+# AI stem separation
+# NOTE: install torch with CUDA separately for GPU support:
+#   Stable CUDA 12.4:  pip install torch torchaudio --index-url https://download.pytorch.org/whl/cu124
+#   Blackwell (RTX 5090) needs nightly:
+#     pip install --pre torch torchaudio --index-url https://download.pytorch.org/whl/nightly/cu128
+demucs>=4.0.0
+audio-separator
+onnxruntime       # use onnxruntime-gpu for GPU acceleration with audio-separator models

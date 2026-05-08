@@ -1,0 +1,23 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+dist/
+build/
+
+# App data
+backend/tube_demixer.db
+data/
+
+# Models cache (Demucs/torch downloads)
+backend/.cache/
+~/.cache/torch/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Claude
+.claude
