@@ -8,7 +8,7 @@ log = logging.getLogger(__name__)
 # yt-dlp will try each browser in order and use the first one whose cookie
 # store it can read. None at the end means "try without cookies" as a last
 # resort (rarely works for YouTube anymore).
-_BROWSERS = ["firefox", "chrome", "edge", "brave", "chromium", "opera", "vivaldi"]
+_BROWSERS = ["firefox", "chrome", "edge", "brave", "chromium", "safari", "opera", "vivaldi"]
 
 # Keywords that mean the *browser* failed (not the URL) — try next browser.
 # Keep this list broad; it's safer to retry than to surface a confusing error.
