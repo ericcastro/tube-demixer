@@ -57,7 +57,7 @@ async function loadModels() {
     const opt = document.createElement("option");
     opt.value = id;
     opt.textContent = info.label;
-    if (id === "htdemucs_6s") opt.selected = true;
+    if (id === "htdemucs_6s") opt.selected = opt.defaultSelected = true;
     $modelSel.appendChild(opt);
   }
   updateModelHint();
