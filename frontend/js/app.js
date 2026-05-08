@@ -109,19 +109,18 @@ function render() {
   $grid.querySelectorAll("[data-delete]").forEach((btn) =>
     btn.addEventListener("click", () => handleDelete(btn.dataset.delete))
   );
-  $grid.querySelectorAll("[data-open]").forEach((btn) =>
-    btn.addEventListener("click", () => {
-      window.location.href = `/mixer.html?id=${btn.dataset.open}`;
-    })
-  );
 }
 
 function cardHtml(p) {
   const isActive = ACTIVE_STATUSES.has(p.status);
 
-  const thumb = p.video_thumbnail
+  const thumbInner = p.video_thumbnail
     ? `<img class="card-thumb" src="${esc(p.video_thumbnail)}" alt="" loading="lazy">`
     : `<div class="card-thumb-placeholder"></div>`;
+
+  const thumb = p.status === "ready"
+    ? `<a class="card-thumb-link" href="/mixer.html?id=${esc(p.id)}" aria-label="Open mixer">${thumbInner}</a>`
+    : thumbInner;
 
   const modelInfo = models[p.model_id];
   const modelLabel = modelInfo ? modelInfo.label : p.model_id;
@@ -139,10 +138,6 @@ function cardHtml(p) {
     ? `<p class="card-error" title="${esc(p.error_message)}">${esc(p.error_message)}</p>`
     : "";
 
-  const openBtn = p.status === "ready"
-    ? `<button class="btn btn-sm btn-primary" data-open="${esc(p.id)}">Open</button>`
-    : "";
-
   return `
     <article class="project-card">
       ${thumb}
@@ -157,7 +152,6 @@ function cardHtml(p) {
         ${error}
       </div>
       <div class="card-actions">
-        ${openBtn}
         <button class="btn btn-sm btn-ghost btn-danger" data-delete="${esc(p.id)}">Delete</button>
       </div>
     </article>`;
