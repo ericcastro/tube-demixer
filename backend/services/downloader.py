@@ -8,7 +8,14 @@ log = logging.getLogger(__name__)
 # yt-dlp will try each browser in order and use the first one whose cookie
 # store it can read. None at the end means "try without cookies" as a last
 # resort (rarely works for YouTube anymore).
-_BROWSERS = ["chrome", "edge", "firefox", "brave", "chromium", "opera", "vivaldi"]
+_BROWSERS = ["firefox", "chrome", "edge", "brave", "chromium", "opera", "vivaldi"]
+
+# Keywords that mean the *browser* failed (not the URL) — try next browser.
+# Keep this list broad; it's safer to retry than to surface a confusing error.
+_BROWSER_ERR_HINTS = (
+    "browser", "cookie", "could not find", "could not copy",
+    "no module", "profile", "keychain", "decrypting",
+)
 
 
 def _build_opts(project_dir: Path, browser: str | None) -> dict:
@@ -41,17 +48,17 @@ def _attempt_download(url: str, project_dir: Path) -> dict:
             return info
         except Exception as exc:
             msg = str(exc).lower()
-            # Browser not installed or profile unreadable — try next
-            if any(k in msg for k in ("browser", "could not find", "no module")):
-                log.debug("Browser %s unavailable: %s", browser, exc)
+            # Browser unavailable / cookie store unreadable — try next
+            if any(k in msg for k in _BROWSER_ERR_HINTS):
+                log.debug("Browser %s unavailable (%s), trying next", browser, exc)
                 last_exc = exc
                 continue
-            # YouTube bot-check — current browser cookies didn't work, try next
+            # YouTube bot-check with this browser's cookies — try next
             if "sign in" in msg or "confirm" in msg or "bot" in msg:
                 log.debug("Browser %s cookies rejected by YouTube, trying next", browser)
                 last_exc = exc
                 continue
-            # Anything else (bad URL, private video, etc.) — fail immediately
+            # Unambiguous content errors (private video, not found, etc.) — stop now
             raise
 
     raise RuntimeError(
