@@ -20,6 +20,8 @@ let startOffset  = 0;    // audio position (s) captured when play() was called
 let startedAt    = 0;    // audioCtx.currentTime when play() was called
 let duration     = 0;
 let playbackRate = 1;
+let tempoMode    = false; // false = Rate (pitch follows), true = Tempo (pitch-preserving)
+let stretchedBuffers = {}; // cached OLA-stretched buffers keyed by `name:rate`
 let rafId        = null;
 
 // ── DOM refs ───────────────────────────────────────────────────────
@@ -32,7 +34,10 @@ const $playBtn    = document.getElementById("play-btn");
 const $seekBar    = document.getElementById("seek-bar");
 const $timeCur    = document.getElementById("time-current");
 const $timeTotal  = document.getElementById("time-total");
-const $speedSel   = document.getElementById("speed-select");
+const $speedSlider = document.getElementById("speed-slider");
+const $speedVal    = document.getElementById("speed-val");
+const $modeRate    = document.getElementById("mode-rate");
+const $modeTempo   = document.getElementById("mode-tempo");
 const $stemsEl    = document.getElementById("stems-container");
 
 // ── Boot ───────────────────────────────────────────────────────────
@@ -177,10 +182,20 @@ function applyGains() {
 function bindTransport() {
   $playBtn.addEventListener("click", togglePlay);
 
-  $speedSel.addEventListener("change", () => {
-    playbackRate = Number($speedSel.value);
+  $speedSlider.addEventListener("input", () => {
+    playbackRate = Number($speedSlider.value);
+    $speedVal.textContent = `${playbackRate.toFixed(2)}×`;
     if (isPlaying) { startOffset = now(); startSources(); }
   });
+
+  function setMode(tempo) {
+    tempoMode = tempo;
+    $modeRate.classList.toggle("active", !tempo);
+    $modeTempo.classList.toggle("active", tempo);
+    if (isPlaying) { startOffset = now(); startSources(); }
+  }
+  $modeRate.addEventListener("click",  () => setMode(false));
+  $modeTempo.addEventListener("click", () => setMode(true));
 
   // Seek bar — prevent RAF from fighting the thumb while dragging
   let dragging = false;
@@ -229,17 +244,63 @@ function startSources() {
 
   for (const [name, buf] of Object.entries(stemBuffers)) {
     const src = audioCtx.createBufferSource();
-    src.buffer = buf;
-    src.playbackRate.value = playbackRate;
+
+    if (tempoMode && playbackRate !== 1) {
+      const key = `${name}:${playbackRate.toFixed(2)}`;
+      if (!stretchedBuffers[key]) stretchedBuffers[key] = olaStretch(buf, playbackRate);
+      src.buffer = stretchedBuffers[key];
+      src.playbackRate.value = 1;
+      src.start(0, startOffset / playbackRate);
+    } else {
+      src.buffer = buf;
+      src.playbackRate.value = playbackRate;
+      src.start(0, startOffset);
+    }
+
     src.connect(stemGains[name]);
-    src.start(0, startOffset);
     activeSources[name] = src;
   }
 
-  // Detect natural end via a one-shot timeout-style trick
   const remaining = (duration - startOffset) / playbackRate;
   clearTimeout(endTimer);
   endTimer = setTimeout(onEnded, remaining * 1000);
+}
+
+// ── OLA time-stretch (pitch-preserving) ───────────────────────────
+function olaStretch(buffer, rate) {
+  const frameSize = 2048;
+  const hopIn  = 512;
+  const hopOut = Math.round(hopIn / rate);
+  const nCh    = buffer.numberOfChannels;
+  const outLen = Math.ceil(buffer.length / rate);
+  const out    = audioCtx.createBuffer(nCh, outLen, buffer.sampleRate);
+
+  // Hann window
+  const win = new Float32Array(frameSize);
+  for (let i = 0; i < frameSize; i++)
+    win[i] = 0.5 * (1 - Math.cos(2 * Math.PI * i / frameSize));
+
+  for (let ch = 0; ch < nCh; ch++) {
+    const inp  = buffer.getChannelData(ch);
+    const outp = new Float32Array(outLen);
+    const norm = new Float32Array(outLen);
+
+    let inPos = 0, outPos = 0;
+    while (inPos + frameSize <= inp.length) {
+      for (let i = 0; i < frameSize && outPos + i < outLen; i++) {
+        outp[outPos + i] += inp[inPos + i] * win[i];
+        norm[outPos + i] += win[i];
+      }
+      inPos  += hopIn;
+      outPos += hopOut;
+    }
+    // normalise overlaps
+    for (let i = 0; i < outLen; i++)
+      if (norm[i] > 1e-6) outp[i] /= norm[i];
+
+    out.copyToChannel(outp, ch);
+  }
+  return out;
 }
 
 let endTimer = null;

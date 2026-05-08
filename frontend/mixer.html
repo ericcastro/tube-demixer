@@ -37,17 +37,15 @@
         <input type="range" id="seek-bar" class="seek-bar" min="0" max="100" step="0.01" value="0">
       </div>
       <span id="time-total" class="transport-time">0:00</span>
-      <label class="speed-label">
-        Speed
-        <select id="speed-select" class="speed-select">
-          <option value="0.5">0.5×</option>
-          <option value="0.75">0.75×</option>
-          <option value="1" selected>1×</option>
-          <option value="1.25">1.25×</option>
-          <option value="1.5">1.5×</option>
-          <option value="2">2×</option>
-        </select>
-      </label>
+      <div class="speed-group">
+        <div class="speed-mode-toggle">
+          <button id="mode-rate"  class="mode-btn active" title="Speed changes pitch too">Rate</button>
+          <button id="mode-tempo" class="mode-btn"        title="Speed without pitch change">Tempo</button>
+        </div>
+        <input id="speed-slider" class="speed-slider" type="range"
+               min="0.25" max="2" step="0.05" value="1">
+        <span id="speed-val" class="speed-val">1.00×</span>
+      </div>
     </div>
 
     <!-- Stem tracks -->

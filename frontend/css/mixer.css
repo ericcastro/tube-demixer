@@ -93,27 +93,49 @@
   height: 4px;
 }
 
-.speed-label {
+.speed-group {
   display: flex;
   align-items: center;
-  gap: .4rem;
-  font-size: .75rem;
-  color: var(--text-muted);
+  gap: .5rem;
   flex-shrink: 0;
 }
 
-.speed-select {
-  background: var(--card);
+.speed-mode-toggle {
+  display: flex;
   border: 1px solid var(--border);
   border-radius: var(--radius-sm);
-  color: var(--text);
-  padding: .25rem .4rem;
-  font-size: .8rem;
-  cursor: pointer;
-  outline: none;
+  overflow: hidden;
 }
 
-.speed-select:focus { border-color: var(--primary); }
+.mode-btn {
+  padding: .2rem .55rem;
+  font-family: inherit;
+  font-size: .72rem;
+  font-weight: 600;
+  border: none;
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+  transition: background var(--transition), color var(--transition);
+}
+
+.mode-btn.active {
+  background: var(--primary);
+  color: #fff;
+}
+
+.speed-slider {
+  width: 100px;
+  cursor: pointer;
+  accent-color: var(--primary);
+}
+
+.speed-val {
+  font-size: .78rem;
+  font-variant-numeric: tabular-nums;
+  color: var(--text-muted);
+  min-width: 4.5ch;
+}
 
 /* ── Stems container ───────────────────────────────────────────── */
 .stems-container {
