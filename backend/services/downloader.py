@@ -28,6 +28,12 @@ def _base_opts(project_dir: Path) -> dict:
         "noplaylist": True,
         "quiet": True,
         "no_warnings": True,
+        # yt-dlp defaults to Deno for JS challenge solving; override to
+        # use Node/quickjs/bun instead (Deno is rarely installed).
+        "js_runtimes": {"node": {}, "quickjs": {}, "bun": {}},
+        # Allow yt-dlp to fetch the EJS solver script from GitHub on first
+        # run; it is cached locally afterwards.
+        "remote_components": ["ejs:github"],
     }
 
 
