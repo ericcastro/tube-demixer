@@ -51,6 +51,29 @@ uv run uvicorn main:app --reload --port 8001
 
 Open **http://localhost:8001**
 
+---
+
+## YouTube authentication
+
+YouTube requires authentication for downloads. The recommended approach is a `cookies.txt` file:
+
+1. Install the [cookies.txt](https://addons.mozilla.org/en-US/firefox/addon/cookies-txt/) extension (Firefox) or [Get cookies.txt LOCALLY](https://chrome.google.com/webstore/detail/get-cookiestxt-locally/cclelndahbckbenkjhflpdbgdldlbecc) (Chrome)
+2. Log into YouTube in your browser
+3. Export cookies for `youtube.com`
+4. Save the file as `backend/cookies.txt`
+
+The file is gitignored and never leaves your machine.
+
+**Alternative — browser auto-detection (opt-in):**
+
+If you'd rather not export a file, the app can read cookies directly from your browser's local cookie store. This is disabled by default:
+
+```bash
+ALLOW_BROWSER_COOKIES=true uv run uvicorn main:app --reload --port 8001
+```
+
+The cookies are read locally and only sent to YouTube — the app never stores or logs them.
+
 Project data (downloaded video, audio, stems) is stored in `backend/data/projects/` and is gitignored.
 
 ---

@@ -5,65 +5,80 @@ import yt_dlp
 
 log = logging.getLogger(__name__)
 
-# yt-dlp will try each browser in order and use the first one whose cookie
-# store it can read. None at the end means "try without cookies" as a last
-# resort (rarely works for YouTube anymore).
+# Drop a cookies.txt file here (exported from your browser) to use it instead
+# of browser auto-detection. See the README for instructions.
+COOKIES_FILE = Path(__file__).parent.parent / "cookies.txt"
+
+# Browsers tried in order when no cookies.txt is present and
+# ALLOW_BROWSER_COOKIES=true is set in the environment.
 _BROWSERS = ["firefox", "chrome", "edge", "brave", "chromium", "safari", "opera", "vivaldi"]
 
-# Keywords that mean the *browser* failed (not the URL) — try next browser.
-# Keep this list broad; it's safer to retry than to surface a confusing error.
 _BROWSER_ERR_HINTS = (
     "browser", "cookie", "could not find", "could not copy",
     "no module", "profile", "keychain", "decrypting",
 )
 
 
-def _build_opts(project_dir: Path, browser: str | None) -> dict:
-    opts = {
+def _base_opts(project_dir: Path) -> dict:
+    return {
         "format": "bestvideo[ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/best",
         "outtmpl": str(project_dir / "video.%(ext)s"),
         "noplaylist": True,
         "quiet": True,
         "no_warnings": True,
     }
-    if browser:
-        opts["cookiesfrombrowser"] = (browser,)
-    return opts
 
 
 def _attempt_download(url: str, project_dir: Path) -> dict:
-    """Try each browser cookie store in sequence; fall back to no cookies."""
-    browsers_to_try: list[str | None] = list(_BROWSERS) + [None]
-    last_exc: Exception | None = None
+    # ── 1. Explicit cookies.txt — always preferred, no implicit access ──
+    if COOKIES_FILE.exists():
+        log.info("Using cookies.txt for authentication")
+        opts = {**_base_opts(project_dir), "cookiefile": str(COOKIES_FILE)}
+        with yt_dlp.YoutubeDL(opts) as ydl:
+            return ydl.extract_info(url, download=True)
 
-    for browser in browsers_to_try:
-        try:
-            opts = _build_opts(project_dir, browser)
-            with yt_dlp.YoutubeDL(opts) as ydl:
-                info = ydl.extract_info(url, download=True)
-            if browser:
+    # ── 2. Browser auto-detect — opt-in via env var ────────────────────
+    import os
+    allow_browser = os.getenv("ALLOW_BROWSER_COOKIES", "false").lower() == "true"
+
+    if allow_browser:
+        last_exc: Exception | None = None
+        for browser in _BROWSERS:
+            try:
+                opts = {**_base_opts(project_dir), "cookiesfrombrowser": (browser,)}
+                with yt_dlp.YoutubeDL(opts) as ydl:
+                    info = ydl.extract_info(url, download=True)
                 log.info("Downloaded using %s cookies", browser)
-            else:
-                log.warning("Downloaded without browser cookies (may be rate-limited)")
-            return info
-        except Exception as exc:
-            msg = str(exc).lower()
-            # Browser unavailable / cookie store unreadable — try next
-            if any(k in msg for k in _BROWSER_ERR_HINTS):
-                log.debug("Browser %s unavailable (%s), trying next", browser, exc)
-                last_exc = exc
-                continue
-            # YouTube bot-check with this browser's cookies — try next
-            if "sign in" in msg or "confirm" in msg or "bot" in msg:
-                log.debug("Browser %s cookies rejected by YouTube, trying next", browser)
-                last_exc = exc
-                continue
-            # Unambiguous content errors (private video, not found, etc.) — stop now
-            raise
+                return info
+            except Exception as exc:
+                msg = str(exc).lower()
+                if any(k in msg for k in _BROWSER_ERR_HINTS):
+                    log.debug("Browser %s unavailable, trying next", browser)
+                    last_exc = exc
+                    continue
+                if "sign in" in msg or "confirm" in msg or "bot" in msg:
+                    log.debug("Browser %s cookies rejected, trying next", browser)
+                    last_exc = exc
+                    continue
+                raise
+        if last_exc:
+            raise RuntimeError(
+                "All browsers failed. Export a cookies.txt and place it in backend/."
+            ) from last_exc
 
-    raise RuntimeError(
-        "YouTube rejected the download. Log into YouTube in Chrome or Edge and retry."
-    ) from last_exc
+    # ── 3. No cookies — try anyway, fail with a clear message ──────────
+    try:
+        opts = _base_opts(project_dir)
+        with yt_dlp.YoutubeDL(opts) as ydl:
+            return ydl.extract_info(url, download=True)
+    except Exception as exc:
+        if "sign in" in str(exc).lower() or "bot" in str(exc).lower():
+            raise RuntimeError(
+                "YouTube requires authentication. "
+                "Export cookies.txt from your browser and place it in backend/. "
+                "See README for instructions."
+            ) from exc
+        raise
 
 
 async def download(url: str, project_id: str) -> tuple[str, dict]:
