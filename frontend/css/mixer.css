@@ -205,6 +205,19 @@
   box-shadow: 0 0 4px rgba(255,255,255,.4);
 }
 
+/* ── Loop region overlay ───────────────────────────────────────── */
+.loop-region {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  background: rgba(6,182,212,.15);
+  border-left:  2px solid rgba(6,182,212,.7);
+  border-right: 2px solid rgba(6,182,212,.7);
+  pointer-events: none;
+  display: none;
+}
+.loop-region.visible { display: block; }
+
 /* controls column */
 .stem-controls {
   display: flex;
@@ -254,4 +267,48 @@
   min-width: 3.2ch;
   text-align: right;
   font-variant-numeric: tabular-nums;
+}
+
+/* ── Beats track ───────────────────────────────────────────────── */
+.beats-track { cursor: default; }
+
+.beats-label {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: .2rem;
+}
+
+.bpm-display {
+  font-size: .65rem;
+  font-weight: 400;
+  color: hsl(195 70% 60%);
+  letter-spacing: .02em;
+}
+
+.beats-controls {
+  gap: .35rem;
+}
+
+.loop-btn {
+  width: 28px;
+  height: 28px;
+  border-radius: 5px;
+  border: 1px solid var(--border);
+  background: transparent;
+  color: var(--text-muted);
+  font-family: inherit;
+  font-size: .8rem;
+  font-weight: 700;
+  cursor: pointer;
+  transition: background var(--transition), color var(--transition), border-color var(--transition);
+  flex-shrink: 0;
+}
+
+.loop-btn:hover { border-color: var(--primary); color: var(--primary); }
+
+.loop-btn.active {
+  background: var(--primary);
+  border-color: var(--primary);
+  color: #fff;
 }

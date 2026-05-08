@@ -1,3 +1,4 @@
+import json
 from pathlib import Path as FilePath
 from pydantic import BaseModel, ConfigDict, computed_field
 from datetime import datetime
@@ -43,6 +44,15 @@ class ProjectResponse(BaseModel):
     video_title: Optional[str] = None
     video_thumbnail: Optional[str] = None
     duration: Optional[str] = None
-    stems: List[StemResponse] = []
+    stems:      List[StemResponse] = []
+    bpm:        Optional[float] = None
+    beats_json: Optional[str]   = None
     created_at: Optional[datetime] = None
     updated_at: Optional[datetime] = None
+
+    @computed_field
+    @property
+    def beats(self) -> List[float]:
+        if self.beats_json:
+            return json.loads(self.beats_json)
+        return []

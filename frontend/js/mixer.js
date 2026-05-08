@@ -9,20 +9,28 @@ const STEM_HUES = {
 const PROJECT_ID = new URLSearchParams(window.location.search).get("id");
 
 // ── Web Audio state ────────────────────────────────────────────────
-let audioCtx     = null;
-let stemBuffers  = {};   // stemName → AudioBuffer
-let stemGains    = {};   // stemName → GainNode
-let activeSources = {};  // stemName → AudioBufferSourceNode (live while playing)
-let stemState    = {};   // stemName → { volume: 0..1.5, muted: bool, soloed: bool }
+let audioCtx      = null;
+let stemBuffers   = {};   // stemName → AudioBuffer
+let stemGains     = {};   // stemName → GainNode
+let activeSources = {};   // stemName → AudioBufferSourceNode (live while playing)
+let stemState     = {};   // stemName → { volume: 0..1.5, muted: bool, soloed: bool }
 
-let isPlaying    = false;
-let startOffset  = 0;    // audio position (s) captured when play() was called
-let startedAt    = 0;    // audioCtx.currentTime when play() was called
-let duration     = 0;
-let playbackRate = 1;
-let tempoMode    = false; // false = Rate (pitch follows), true = Tempo (pitch-preserving)
-let stretchedBuffers = {}; // cached OLA-stretched buffers keyed by `name:rate`
-let rafId        = null;
+let isPlaying     = false;
+let startOffset   = 0;    // audio position (s) captured when play() was called
+let startedAt     = 0;    // audioCtx.currentTime when play() was called
+let duration      = 0;
+let playbackRate  = 1;
+let tempoMode     = false;
+let stretchedBuffers = {};
+
+// ── Beat / loop state ──────────────────────────────────────────────
+let beats       = [];     // beat times in seconds (original speed)
+let baseBpm     = 0;
+let loopEnabled = false;
+let loopStart   = 0;
+let loopEnd     = 0;
+
+let rafId = null;
 
 // ── DOM refs ───────────────────────────────────────────────────────
 const $title      = document.getElementById("mixer-title");
@@ -64,12 +72,17 @@ async function boot() {
       return;
     }
 
+    beats   = project.beats  ?? [];
+    baseBpm = project.bpm    ?? 0;
+    loopEnd = project.duration ? Number(project.duration) : 0;
+
     await loadAllStems(project.stems);
     buildMixer(project.stems);
     $loading.classList.add("hidden");
     $root.classList.remove("hidden");
     bindTransport();
     bindStemControls();
+    bindLoopControls();
 
   } catch (err) {
     $loadingMsg.textContent = `Error: ${err.message}`;
@@ -105,17 +118,44 @@ function buildMixer(stems) {
   $seekBar.max = duration;
   $timeTotal.textContent = fmt(duration);
 
+  $stemsEl.appendChild(buildBeatsTrack());
   for (const stem of stems) {
     $stemsEl.appendChild(buildTrack(stem.stem_name));
   }
 
-  // Draw waveforms once layout is settled
   requestAnimationFrame(() => {
+    // Beat canvas
+    const beatsCanvas = $stemsEl.querySelector(".beats-track .waveform");
+    if (beatsCanvas) drawBeats(beatsCanvas);
+
+    // Stem waveforms
     for (const [name, buf] of Object.entries(stemBuffers)) {
       const canvas = $stemsEl.querySelector(`[data-stem="${name}"] .waveform`);
       if (canvas) drawWaveform(canvas, buf, STEM_HUES[name] ?? 220);
     }
   });
+}
+
+function buildBeatsTrack() {
+  const el = document.createElement("div");
+  el.className = "stem-track beats-track";
+  el.style.setProperty("--stem-hue", 195);
+  el.innerHTML = `
+    <div class="stem-label beats-label">
+      BEATS
+      <span class="bpm-display" id="bpm-display">${baseBpm ? Math.round(baseBpm) + " BPM" : ""}</span>
+    </div>
+    <div class="waveform-wrap" id="beats-wrap">
+      <canvas class="waveform"></canvas>
+      <div class="waveform-playhead"></div>
+      <div class="loop-region" id="loop-region-beats"></div>
+    </div>
+    <div class="stem-controls beats-controls">
+      <button class="loop-btn" id="btn-loop-start" title="Set loop start here">[</button>
+      <button class="loop-btn" id="btn-loop-end"   title="Set loop end here">]</button>
+      <button class="loop-btn" id="btn-loop-toggle" title="Toggle loop">⟳</button>
+    </div>`;
+  return el;
 }
 
 function buildTrack(name) {
@@ -129,6 +169,7 @@ function buildTrack(name) {
     <div class="waveform-wrap">
       <canvas class="waveform"></canvas>
       <div class="waveform-playhead"></div>
+      <div class="loop-region"></div>
     </div>
     <div class="stem-controls">
       <button class="btn-mute" data-action="mute"   title="Mute">M</button>
@@ -186,6 +227,7 @@ function bindTransport() {
   $speedSlider.addEventListener("input", () => {
     playbackRate = Number($speedSlider.value);
     $speedVal.textContent = `${playbackRate.toFixed(2)}×`;
+    updateBpm();
   });
   $speedSlider.addEventListener("change", () => applySpeed());
 
@@ -275,13 +317,80 @@ function startSources() {
       src.start(0, startOffset);
     }
 
+    if (loopEnabled && loopEnd > loopStart) {
+      src.loop = true;
+      if (tempoMode && playbackRate !== 1) {
+        src.loopStart = loopStart / playbackRate;
+        src.loopEnd   = loopEnd   / playbackRate;
+      } else {
+        src.loopStart = loopStart;
+        src.loopEnd   = loopEnd;
+      }
+    }
+
     src.connect(stemGains[name]);
     activeSources[name] = src;
   }
 
-  const remaining = (duration - startOffset) / playbackRate;
+  const remaining = loopEnabled
+    ? Infinity
+    : (duration - startOffset) / playbackRate;
   clearTimeout(endTimer);
-  endTimer = setTimeout(onEnded, remaining * 1000);
+  if (isFinite(remaining)) endTimer = setTimeout(onEnded, remaining * 1000);
+}
+
+// ── Loop controls ─────────────────────────────────────────────────
+function bindLoopControls() {
+  document.getElementById("btn-loop-start")?.addEventListener("click", () => {
+    loopStart = now();
+    if (loopEnd <= loopStart) loopEnd = duration;
+    updateLoopUI();
+    if (isPlaying && loopEnabled) { startOffset = now(); startSources(); }
+  });
+
+  document.getElementById("btn-loop-end")?.addEventListener("click", () => {
+    loopEnd = now();
+    if (loopEnd <= loopStart) loopStart = 0;
+    updateLoopUI();
+    if (isPlaying && loopEnabled) { startOffset = now(); startSources(); }
+  });
+
+  document.getElementById("btn-loop-toggle")?.addEventListener("click", () => {
+    loopEnabled = !loopEnabled;
+    document.getElementById("btn-loop-toggle")?.classList.toggle("active", loopEnabled);
+    if (isPlaying) { startOffset = now(); startSources(); }
+  });
+
+  // Click on beats canvas to set loop start; shift-click for loop end
+  document.getElementById("beats-wrap")?.addEventListener("click", (e) => {
+    const wrap = e.currentTarget;
+    const pct  = (e.clientX - wrap.getBoundingClientRect().left) / wrap.clientWidth;
+    const t    = Math.max(0, Math.min(pct * duration, duration));
+    if (e.shiftKey) {
+      loopEnd = t;
+      if (loopEnd <= loopStart) loopStart = 0;
+    } else {
+      loopStart = t;
+      if (loopEnd <= loopStart) loopEnd = duration;
+    }
+    updateLoopUI();
+    if (isPlaying && loopEnabled) { startOffset = now(); startSources(); }
+  });
+}
+
+function updateLoopUI() {
+  const pctS = duration > 0 ? loopStart / duration : 0;
+  const pctE = duration > 0 ? loopEnd   / duration : 1;
+  document.querySelectorAll(".loop-region").forEach(el => {
+    el.style.left  = `${pctS * 100}%`;
+    el.style.width = `${(pctE - pctS) * 100}%`;
+    el.classList.toggle("visible", loopEnabled);
+  });
+}
+
+function updateBpm() {
+  const el = document.getElementById("bpm-display");
+  if (el && baseBpm) el.textContent = `${Math.round(baseBpm * playbackRate)} BPM`;
 }
 
 // ── WSOLA time-stretch (off main thread) ──────────────────────────
@@ -400,6 +509,35 @@ function drawWaveform(canvas, buffer, hue) {
     const h = peak * H * 0.92;
     ctx.fillRect(x, (H - h) / 2, 1, h || 1);
   }
+}
+
+// ── Beat canvas ────────────────────────────────────────────────────
+function drawBeats(canvas) {
+  const dpr = window.devicePixelRatio || 1;
+  const W   = canvas.clientWidth;
+  const H   = canvas.clientHeight;
+  if (!W || !H) return;
+  canvas.width  = W * dpr;
+  canvas.height = H * dpr;
+  const ctx = canvas.getContext("2d");
+  ctx.scale(dpr, dpr);
+
+  ctx.fillStyle = "hsl(195 30% 10%)";
+  ctx.fillRect(0, 0, W, H);
+
+  if (!beats.length || !duration) return;
+
+  // Group beats into bars (every 4 beats) for visual hierarchy
+  beats.forEach((t, i) => {
+    const x   = (t / duration) * W;
+    const bar = i % 4 === 0;
+    ctx.fillStyle = bar
+      ? "hsl(195 80% 65% / 0.9)"
+      : "hsl(195 60% 50% / 0.55)";
+    const w = bar ? 2 : 1;
+    const h = bar ? H : H * 0.6;
+    ctx.fillRect(x - w / 2, (H - h) / 2, w, h);
+  });
 }
 
 // ── Utility ────────────────────────────────────────────────────────

@@ -12,6 +12,7 @@ from models.project import Project
 from models.stem import Stem
 from schemas import ProjectCreate, ProjectResponse
 from services import downloader, extractor
+from services.beats import detect_beats
 from services.separator import MODELS, separate
 
 router = APIRouter()
@@ -110,6 +111,11 @@ async def _process_project(project_id: str):
                 stem_name=s["stem_name"],
                 file_path=s["file_path"],
             ))
+
+        # ── Detect beats ──────────────────────────────────────────────
+        beat_data = await loop.run_in_executor(None, detect_beats, audio_path)
+        project.bpm = beat_data["bpm"]
+        project.beats_json = beat_data["beats_json"]
 
         project.status = "ready"
         db.commit()
