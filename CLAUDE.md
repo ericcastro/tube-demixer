@@ -9,14 +9,14 @@ This file provides guidance to Claude Code (claude.ai/code) when working with th
 ## Running the app
 
 **Prerequisites (install once):**
-- Python 3.11+
+- [uv](https://docs.astral.sh/uv/getting-started/installation/)
 - [FFmpeg](https://ffmpeg.org/download.html) on `PATH`
-- NVIDIA GPU driver + CUDA (for stem separation — not yet wired up)
+- NVIDIA GPU driver (CUDA 12.8+ for RTX 5000 series / Blackwell)
 
 ```bash
 cd backend
-pip install -r requirements.txt
-uvicorn main:app --reload --port 8001
+uv sync
+uv run uvicorn main:app --reload --port 8001
 ```
 
 Then open `http://localhost:8000`.

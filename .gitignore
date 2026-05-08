@@ -6,6 +6,7 @@ __pycache__/
 venv/
 dist/
 build/
+.python-version
 
 # App data
 backend/tube_demixer.db

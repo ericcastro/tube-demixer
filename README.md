@@ -23,24 +23,21 @@ Drop a YouTube link, get back isolated audio stems. A local web app that downloa
 
 ## Installation
 
+Requires [uv](https://docs.astral.sh/uv/getting-started/installation/).
+
 ```bash
 cd backend
-pip install -r requirements.txt
+uv sync
 ```
 
-**GPU support (pick one):**
+This installs everything including PyTorch nightly with CUDA 12.8 (works on RTX 20xx through 50xx / Blackwell). To use a different PyTorch build, edit the `[[tool.uv.index]]` URL in `backend/pyproject.toml` before running `uv sync`:
 
-```bash
-# CUDA 12.4 (RTX 3000–4000 series):
-pip install torch torchaudio --index-url https://download.pytorch.org/whl/cu124
-
-# CUDA 12.8 nightly — required for Blackwell / RTX 5000 series:
-pip install --pre torch torchaudio --index-url https://download.pytorch.org/whl/nightly/cu128
 ```
+# Stable CUDA 12.4:
+url = "https://download.pytorch.org/whl/cu124"
 
-CPU-only (no CUDA):
-```bash
-pip install torch torchaudio
+# CPU only:
+# remove the [tool.uv.sources] and [[tool.uv.index]] blocks entirely
 ```
 
 ---
@@ -49,7 +46,7 @@ pip install torch torchaudio
 
 ```bash
 cd backend
-uvicorn main:app --reload --port 8001
+uv run uvicorn main:app --reload --port 8001
 ```
 
 Open **http://localhost:8001**

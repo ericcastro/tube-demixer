@@ -1,0 +1,38 @@
+[project]
+name = "tube-demixer"
+version = "0.1.0"
+requires-python = ">=3.11"
+dependencies = [
+    "fastapi>=0.110.0",
+    "uvicorn[standard]>=0.27.0",
+    "yt-dlp>=2024.1.0",
+    "ffmpeg-python>=0.2.0",
+    "sqlalchemy>=2.0.0",
+    "python-multipart>=0.0.9",
+    "aiofiles>=23.2.1",
+    "pydantic>=2.0.0",
+    "demucs>=4.0.0",
+    "audio-separator",
+    "onnxruntime",
+    "torch>=2.0.0",
+    "torchaudio",
+]
+
+# PyTorch is pulled from the nightly cu128 index (supports all GPUs ≥ RTX 20xx,
+# including Blackwell / RTX 5000 series). Change the index URL below for stable
+# CUDA builds (e.g. https://download.pytorch.org/whl/cu124 for stable CUDA 12.4).
+[tool.uv]
+prerelease = "allow"
+# triton is a torch dependency that only builds on Linux — tell the resolver to skip it on Windows
+override-dependencies = [
+    "triton; sys_platform == 'linux'",
+]
+
+[tool.uv.sources]
+torch = { index = "pytorch" }
+torchaudio = { index = "pytorch" }
+
+[[tool.uv.index]]
+name = "pytorch"
+url = "https://download.pytorch.org/whl/nightly/cu128"
+explicit = true
