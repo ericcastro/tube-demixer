@@ -182,17 +182,36 @@ function applyGains() {
 function bindTransport() {
   $playBtn.addEventListener("click", togglePlay);
 
+  // Show value while dragging; only reprocess on release
   $speedSlider.addEventListener("input", () => {
     playbackRate = Number($speedSlider.value);
     $speedVal.textContent = `${playbackRate.toFixed(2)}×`;
-    if (isPlaying) { startOffset = now(); startSources(); }
   });
+  $speedSlider.addEventListener("change", () => applySpeed());
 
-  function setMode(tempo) {
+  async function applySpeed() {
+    if (tempoMode && playbackRate !== 1) {
+      const wasPlaying = isPlaying;
+      if (wasPlaying) { startOffset = now(); pauseAll(); }
+      await ensureStretched(playbackRate);
+      if (wasPlaying) playAll();
+    } else {
+      if (isPlaying) { startOffset = now(); startSources(); }
+    }
+  }
+
+  async function setMode(tempo) {
     tempoMode = tempo;
     $modeRate.classList.toggle("active", !tempo);
     $modeTempo.classList.toggle("active", tempo);
-    if (isPlaying) { startOffset = now(); startSources(); }
+    if (tempo && playbackRate !== 1) {
+      const wasPlaying = isPlaying;
+      if (wasPlaying) { startOffset = now(); pauseAll(); }
+      await ensureStretched(playbackRate);
+      if (wasPlaying) playAll();
+    } else {
+      if (isPlaying) { startOffset = now(); startSources(); }
+    }
   }
   $modeRate.addEventListener("click",  () => setMode(false));
   $modeTempo.addEventListener("click", () => setMode(true));
@@ -244,10 +263,9 @@ function startSources() {
 
   for (const [name, buf] of Object.entries(stemBuffers)) {
     const src = audioCtx.createBufferSource();
+    const key = `${name}:${playbackRate.toFixed(2)}`;
 
-    if (tempoMode && playbackRate !== 1) {
-      const key = `${name}:${playbackRate.toFixed(2)}`;
-      if (!stretchedBuffers[key]) stretchedBuffers[key] = olaStretch(buf, playbackRate);
+    if (tempoMode && playbackRate !== 1 && stretchedBuffers[key]) {
       src.buffer = stretchedBuffers[key];
       src.playbackRate.value = 1;
       src.start(0, startOffset / playbackRate);
@@ -266,41 +284,38 @@ function startSources() {
   endTimer = setTimeout(onEnded, remaining * 1000);
 }
 
-// ── OLA time-stretch (pitch-preserving) ───────────────────────────
-function olaStretch(buffer, rate) {
-  const frameSize = 2048;
-  const hopIn  = 512;
-  const hopOut = Math.round(hopIn / rate);
-  const nCh    = buffer.numberOfChannels;
-  const outLen = Math.ceil(buffer.length / rate);
-  const out    = audioCtx.createBuffer(nCh, outLen, buffer.sampleRate);
+// ── WSOLA time-stretch (off main thread) ──────────────────────────
+function stretchBuffer(buf, rate) {
+  return new Promise(resolve => {
+    const worker = new Worker("/js/stretch-worker.js");
+    const channels = Array.from({ length: buf.numberOfChannels }, (_, ch) => {
+      const d = new Float32Array(buf.length);
+      buf.copyFromChannel(d, ch);
+      return d;
+    });
+    worker.onmessage = ({ data }) => {
+      const out = audioCtx.createBuffer(
+        data.channels.length, data.channels[0].length, buf.sampleRate
+      );
+      data.channels.forEach((ch, i) => out.copyToChannel(new Float32Array(ch), i));
+      worker.terminate();
+      resolve(out);
+    };
+    worker.postMessage({ channels, rate }, channels.map(c => c.buffer));
+  });
+}
 
-  // Hann window
-  const win = new Float32Array(frameSize);
-  for (let i = 0; i < frameSize; i++)
-    win[i] = 0.5 * (1 - Math.cos(2 * Math.PI * i / frameSize));
+async function ensureStretched(rate) {
+  const rk = rate.toFixed(2);
+  const needed = Object.keys(stemBuffers).filter(n => !stretchedBuffers[`${n}:${rk}`]);
+  if (!needed.length) return;
 
-  for (let ch = 0; ch < nCh; ch++) {
-    const inp  = buffer.getChannelData(ch);
-    const outp = new Float32Array(outLen);
-    const norm = new Float32Array(outLen);
-
-    let inPos = 0, outPos = 0;
-    while (inPos + frameSize <= inp.length) {
-      for (let i = 0; i < frameSize && outPos + i < outLen; i++) {
-        outp[outPos + i] += inp[inPos + i] * win[i];
-        norm[outPos + i] += win[i];
-      }
-      inPos  += hopIn;
-      outPos += hopOut;
-    }
-    // normalise overlaps
-    for (let i = 0; i < outLen; i++)
-      if (norm[i] > 1e-6) outp[i] /= norm[i];
-
-    out.copyToChannel(outp, ch);
-  }
-  return out;
+  $speedVal.textContent = "…";
+  const results = await Promise.all(
+    needed.map(name => stretchBuffer(stemBuffers[name], rate).then(b => [name, b]))
+  );
+  for (const [name, b] of results) stretchedBuffers[`${name}:${rk}`] = b;
+  $speedVal.textContent = `${rate.toFixed(2)}×`;
 }
 
 let endTimer = null;
