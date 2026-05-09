@@ -54,6 +54,13 @@
             </select>
             <span class="field-hint" id="model-hint"></span>
           </div>
+          <div class="field">
+            <label for="beat-model-select">Beat detection model</label>
+            <select id="beat-model-select" name="beat_model_id">
+              <!-- populated by JS from /api/projects/beat-models -->
+            </select>
+            <span class="field-hint" id="beat-model-hint"></span>
+          </div>
           <div class="form-actions">
             <button type="button" id="cancel-btn" class="btn btn-ghost">Cancel</button>
             <button type="submit" class="btn btn-primary" id="create-btn">

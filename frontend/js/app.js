@@ -19,6 +19,7 @@ const STEM_HUES = {
 // ── State ──────────────────────────────────────────────────────────
 let projects = [];
 let models = {};
+let beatModels = {};
 let pollTimer = null;
 
 // ── DOM refs ───────────────────────────────────────────────────────
@@ -31,18 +32,21 @@ const $cancelBtn = document.getElementById("cancel-btn");
 const $createBtn = document.getElementById("create-btn");
 const $urlInput  = document.getElementById("yt-url");
 const $urlError  = document.getElementById("url-error");
-const $modelSel  = document.getElementById("model-select");
-const $modelHint = document.getElementById("model-hint");
+const $modelSel      = document.getElementById("model-select");
+const $modelHint     = document.getElementById("model-hint");
+const $beatModelSel  = document.getElementById("beat-model-select");
+const $beatModelHint = document.getElementById("beat-model-hint");
 const $backdrop  = $panel.querySelector(".panel-backdrop");
 
 // ── Boot ───────────────────────────────────────────────────────────
-const [, ] = await Promise.all([loadModels(), loadProjects()]);
+const [, , ] = await Promise.all([loadModels(), loadBeatModels(), loadProjects()]);
 
 $newBtn.addEventListener("click", openPanel);
 $cancelBtn.addEventListener("click", closePanel);
 $backdrop.addEventListener("click", closePanel);
 $form.addEventListener("submit", handleCreate);
 $modelSel.addEventListener("change", () => updateModelHint());
+$beatModelSel.addEventListener("change", () => updateBeatModelHint());
 document.addEventListener("keydown", (e) => { if (e.key === "Escape") closePanel(); });
 
 // ── Models ─────────────────────────────────────────────────────────
@@ -65,6 +69,27 @@ $modelSel.appendChild(opt);
 function updateModelHint() {
   const info = models[$modelSel.value];
   $modelHint.textContent = info ? info.description : "";
+}
+
+async function loadBeatModels() {
+  try {
+    beatModels = await api.getBeatModels();
+  } catch {
+    return;
+  }
+  $beatModelSel.innerHTML = "";
+  for (const [id, info] of Object.entries(beatModels)) {
+    const opt = document.createElement("option");
+    opt.value = id;
+    opt.textContent = info.label;
+    $beatModelSel.appendChild(opt);
+  }
+  updateBeatModelHint();
+}
+
+function updateBeatModelHint() {
+  const info = beatModels[$beatModelSel.value];
+  $beatModelHint.textContent = info ? info.description : "";
 }
 
 // ── Data ───────────────────────────────────────────────────────────
@@ -176,12 +201,13 @@ async function handleCreate(e) {
     return;
   }
 
-  const name     = document.getElementById("proj-name").value.trim();
-  const model_id = $modelSel.value;
+  const name          = document.getElementById("proj-name").value.trim();
+  const model_id      = $modelSel.value;
+  const beat_model_id = $beatModelSel.value;
 
   setCreating(true);
   try {
-    const project = await api.createProject({ youtube_url: url, name, model_id });
+    const project = await api.createProject({ youtube_url: url, name, model_id, beat_model_id });
     projects.unshift(project);
     render();
     schedulePolling();
@@ -220,6 +246,7 @@ function closePanel() {
   $urlError.textContent = "";
   $urlInput.classList.remove("invalid");
   updateModelHint();
+  updateBeatModelHint();
   setCreating(false);
 }
 

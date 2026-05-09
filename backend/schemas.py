@@ -28,6 +28,7 @@ class ProjectCreate(BaseModel):
     youtube_url: str
     name: str = ""
     model_id: str = "htdemucs"
+    beat_model_id: str = "beat_this"
 
 
 class ProjectResponse(BaseModel):
@@ -37,6 +38,7 @@ class ProjectResponse(BaseModel):
     name: str
     youtube_url: str
     model_id: str
+    beat_model_id: str = "beat_this"
     status: str
     error_message: Optional[str] = None
     video_path: Optional[str] = None

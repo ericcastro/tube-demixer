@@ -23,7 +23,8 @@ class Project(Base):
     created_at = Column(DateTime, server_default=func.now())
     updated_at = Column(DateTime, server_default=func.now(), onupdate=func.now())
 
-    bpm        = Column(Float,  nullable=True)
-    beats_json = Column(Text,   nullable=True)  # JSON array of beat times in seconds
+    beat_model_id = Column(String, nullable=False, default="librosa", server_default="librosa")
+    bpm           = Column(Float,  nullable=True)
+    beats_json    = Column(Text,   nullable=True)  # JSON array of beat times in seconds
 
     stems = relationship("Stem", cascade="all, delete-orphan", lazy="selectin")

@@ -1,3 +1,4 @@
+import asyncio
 import logging
 
 from fastapi import APIRouter, Depends, BackgroundTasks, HTTPException
@@ -12,7 +13,7 @@ from models.project import Project
 from models.stem import Stem
 from schemas import ProjectCreate, ProjectResponse
 from services import downloader, extractor
-from services.beats import detect_beats
+from services.beats import BEAT_MODELS, detect_beats
 from services.separator import MODELS, separate
 
 router = APIRouter()
@@ -30,6 +31,14 @@ def list_models():
     }
 
 
+@router.get("/beat-models")
+def list_beat_models():
+    return {
+        mid: {"label": cfg["label"], "description": cfg["description"]}
+        for mid, cfg in BEAT_MODELS.items()
+    }
+
+
 @router.get("", response_model=List[ProjectResponse])
 def list_projects(db: Session = Depends(get_db)):
     return db.query(Project).order_by(Project.created_at.desc()).all()
@@ -39,11 +48,14 @@ def list_projects(db: Session = Depends(get_db)):
 def create_project(req: ProjectCreate, background_tasks: BackgroundTasks, db: Session = Depends(get_db)):
     if req.model_id not in MODELS:
         raise HTTPException(status_code=400, detail=f"Unknown model: {req.model_id!r}")
+    if req.beat_model_id not in BEAT_MODELS:
+        raise HTTPException(status_code=400, detail=f"Unknown beat model: {req.beat_model_id!r}")
 
     project = Project(
         youtube_url=req.youtube_url,
         name=req.name or "New Project",
         model_id=req.model_id,
+        beat_model_id=req.beat_model_id,
         status="created",
     )
     db.add(project)
@@ -113,7 +125,9 @@ async def _process_project(project_id: str):
             ))
 
         # ── Detect beats ──────────────────────────────────────────────
-        beat_data = await loop.run_in_executor(None, detect_beats, audio_path)
+        beat_data = await asyncio.get_event_loop().run_in_executor(
+            None, detect_beats, audio_path, project.beat_model_id
+        )
         project.bpm = beat_data["bpm"]
         project.beats_json = beat_data["beats_json"]
 

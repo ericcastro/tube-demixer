@@ -1,5 +1,9 @@
 import * as api from "./api.js";
 
+const SVG_PLAY     = `<svg viewBox="0 0 20 20" fill="currentColor" width="18" height="18" aria-hidden="true"><path d="M5 3.5l13 6.5-13 6.5z"/></svg>`;
+const SVG_PAUSE    = `<svg viewBox="0 0 20 20" fill="currentColor" width="18" height="18" aria-hidden="true"><rect x="3.5" y="3" width="5" height="14" rx="1.5"/><rect x="11.5" y="3" width="5" height="14" rx="1.5"/></svg>`;
+const SVG_DOWNLOAD = `<svg viewBox="0 0 20 20" fill="currentColor" width="14" height="14" aria-hidden="true"><path d="M10 2a1 1 0 0 0-1 1v7.586L6.707 8.293a1 1 0 1 0-1.414 1.414l4 4a1 1 0 0 0 1.414 0l4-4a1 1 0 1 0-1.414-1.414L11 10.586V3a1 1 0 0 0-1-1z"/><rect x="3" y="16" width="14" height="1.5" rx=".75"/></svg>`;
+
 const STEM_HUES = {
   vocals: 280, drums: 20, bass: 200, other: 150,
   guitar: 45,  piano: 340, no_vocals: 160, instrumental: 160,
@@ -24,11 +28,14 @@ let tempoMode     = false;
 let stretchedBuffers = {};
 
 // ── Beat / loop state ──────────────────────────────────────────────
-let beats       = [];     // beat times in seconds (original speed)
-let baseBpm     = 0;
-let loopEnabled = false;
-let loopStart   = 0;
-let loopEnd     = 0;
+let beats            = [];    // beat times in seconds (original speed)
+let baseBpm          = 0;
+let loopEnabled      = false;
+let loopStart        = 0;
+let loopEnd          = 0;
+let loopStartBeatIdx = -1;
+let loopEndBeatIdx   = -1;
+let beatsClickPhase  = 0;  // 0=clear, 1=start set, 2=loop active
 
 let rafId = null;
 
@@ -120,7 +127,7 @@ function buildMixer(stems) {
 
   $stemsEl.appendChild(buildBeatsTrack());
   for (const stem of stems) {
-    $stemsEl.appendChild(buildTrack(stem.stem_name));
+    $stemsEl.appendChild(buildTrack(stem.stem_name, stem.url));
   }
 
   requestAnimationFrame(() => {
@@ -151,14 +158,23 @@ function buildBeatsTrack() {
       <div class="loop-region" id="loop-region-beats"></div>
     </div>
     <div class="stem-controls beats-controls">
-      <button class="loop-btn" id="btn-loop-start" title="Set loop start here">[</button>
-      <button class="loop-btn" id="btn-loop-end"   title="Set loop end here">]</button>
-      <button class="loop-btn" id="btn-loop-toggle" title="Toggle loop">⟳</button>
+      <div class="loop-row">
+        <span class="beat-count" id="beat-count">—</span>
+        <button class="loop-btn" id="btn-loop-start"  title="Set loop in (snaps to beat)">[</button>
+        <button class="loop-btn" id="btn-loop-end"    title="Set loop out &amp; restart (snaps to beat)">]</button>
+        <button class="loop-btn" id="btn-loop-toggle" title="Toggle loop">⟳</button>
+      </div>
+      <div class="loop-row">
+        <button class="loop-btn" id="btn-loop-prev"   title="Move loop 1 beat back">‹</button>
+        <button class="loop-btn" id="btn-loop-shrink" title="Remove 1 beat from loop">−</button>
+        <button class="loop-btn" id="btn-loop-expand" title="Add 1 beat to loop">+</button>
+        <button class="loop-btn" id="btn-loop-next"   title="Move loop 1 beat forward">›</button>
+      </div>
     </div>`;
   return el;
 }
 
-function buildTrack(name) {
+function buildTrack(name, url) {
   const hue = STEM_HUES[name] ?? 220;
   const el = document.createElement("div");
   el.className = "stem-track";
@@ -177,6 +193,7 @@ function buildTrack(name) {
       <input  class="vol-slider" type="range" data-action="volume"
               min="0" max="150" value="100" title="Volume">
       <span class="vol-value">100%</span>
+      <a class="btn-download" href="${url}" download="${name}.wav" title="Download ${name}">${SVG_DOWNLOAD}</a>
     </div>`;
   return el;
 }
@@ -272,10 +289,10 @@ function bindTransport() {
     else paintUI(startOffset);
   }
 
-  // Click on any waveform also seeks
+  // Click on any stem waveform seeks (beats-wrap handled separately with snap)
   $stemsEl.addEventListener("click", (e) => {
     const wrap = e.target.closest(".waveform-wrap");
-    if (!wrap) return;
+    if (!wrap || wrap.id === "beats-wrap") return;
     const rect = wrap.getBoundingClientRect();
     const pct = (e.clientX - rect.left) / rect.width;
     startOffset = Math.max(0, Math.min(pct * duration, duration));
@@ -295,7 +312,7 @@ function playAll() {
   if (startOffset >= duration - 0.05) startOffset = 0;
   startSources();
   isPlaying = true;
-  $playBtn.textContent = "⏸";
+  $playBtn.innerHTML = SVG_PAUSE;
   scheduleRaf();
 }
 
@@ -339,42 +356,151 @@ function startSources() {
   if (isFinite(remaining)) endTimer = setTimeout(onEnded, remaining * 1000);
 }
 
+// ── Beat helpers ───────────────────────────────────────────────────
+function nearestBeatIdx(t) {
+  if (!beats.length) return -1;
+  let idx = 0, minDist = Infinity;
+  for (let i = 0; i < beats.length; i++) {
+    const d = Math.abs(beats[i] - t);
+    if (d < minDist) { minDist = d; idx = i; }
+  }
+  return idx;
+}
+
+function setLoopByBeats(startIdx, endIdx) {
+  loopStartBeatIdx = Math.max(0, startIdx);
+  loopEndBeatIdx   = Math.min(beats.length - 1, endIdx);
+  loopStart = beats[loopStartBeatIdx] ?? 0;
+  loopEnd   = beats[loopEndBeatIdx]   ?? duration;
+  updateBeatCount();
+  updateLoopUI();
+}
+
+function updateBeatCount() {
+  const el = document.getElementById("beat-count");
+  if (!el) return;
+  if (!loopEnabled || loopStartBeatIdx < 0 || loopEndBeatIdx <= loopStartBeatIdx) {
+    el.textContent = "—";
+  } else {
+    el.textContent = `${loopEndBeatIdx - loopStartBeatIdx}♩`;
+  }
+}
+
 // ── Loop controls ─────────────────────────────────────────────────
 function bindLoopControls() {
+  // [ — set loop in, snap to beat, enable loop
   document.getElementById("btn-loop-start")?.addEventListener("click", () => {
-    loopStart = now();
-    if (loopEnd <= loopStart) loopEnd = duration;
+    const idx = nearestBeatIdx(now());
+    loopStartBeatIdx = idx >= 0 ? idx : 0;
+    loopStart = beats[loopStartBeatIdx] ?? now();
+    if (loopEndBeatIdx < 0 || loopEndBeatIdx <= loopStartBeatIdx) {
+      loopEndBeatIdx = Math.min(loopStartBeatIdx + 4, beats.length - 1);
+      loopEnd = beats[loopEndBeatIdx] ?? duration;
+    }
+    loopEnabled = true;
+    beatsClickPhase = 2;
+    document.getElementById("btn-loop-toggle")?.classList.add("active");
+    updateBeatCount();
     updateLoopUI();
-    if (isPlaying && loopEnabled) { startOffset = now(); startSources(); }
+    if (isPlaying) { startOffset = loopStart; startSources(); }
   });
 
+  // ] — set loop out, snap to beat, enable loop, restart from loopStart
   document.getElementById("btn-loop-end")?.addEventListener("click", () => {
-    loopEnd = now();
-    if (loopEnd <= loopStart) loopStart = 0;
+    const idx = nearestBeatIdx(now());
+    loopEndBeatIdx = idx >= 0 ? idx : beats.length - 1;
+    loopEnd = beats[loopEndBeatIdx] ?? now();
+    if (loopEndBeatIdx <= loopStartBeatIdx) {
+      loopStartBeatIdx = Math.max(0, loopEndBeatIdx - 4);
+      loopStart = beats[loopStartBeatIdx] ?? 0;
+    }
+    loopEnabled = true;
+    beatsClickPhase = 2;
+    document.getElementById("btn-loop-toggle")?.classList.add("active");
+    updateBeatCount();
     updateLoopUI();
-    if (isPlaying && loopEnabled) { startOffset = now(); startSources(); }
+    startOffset = loopStart;
+    if (isPlaying) startSources(); else paintUI(startOffset);
   });
 
+  // ⟳ — toggle loop only
   document.getElementById("btn-loop-toggle")?.addEventListener("click", () => {
     loopEnabled = !loopEnabled;
+    if (!loopEnabled) beatsClickPhase = 0;
     document.getElementById("btn-loop-toggle")?.classList.toggle("active", loopEnabled);
+    updateBeatCount();
+    updateLoopUI();
     if (isPlaying) { startOffset = now(); startSources(); }
   });
 
-  // Click on beats canvas to set loop start; shift-click for loop end
+  // ‹ — move loop 1 beat back
+  document.getElementById("btn-loop-prev")?.addEventListener("click", () => {
+    if (loopStartBeatIdx <= 0) return;
+    setLoopByBeats(loopStartBeatIdx - 1, loopEndBeatIdx - 1);
+    if (isPlaying && loopEnabled) { startOffset = loopStart; startSources(); }
+  });
+
+  // › — move loop 1 beat forward
+  document.getElementById("btn-loop-next")?.addEventListener("click", () => {
+    if (loopEndBeatIdx >= beats.length - 1) return;
+    setLoopByBeats(loopStartBeatIdx + 1, loopEndBeatIdx + 1);
+    if (isPlaying && loopEnabled) { startOffset = loopStart; startSources(); }
+  });
+
+  // − — remove 1 beat from loop
+  document.getElementById("btn-loop-shrink")?.addEventListener("click", () => {
+    if (loopEndBeatIdx - loopStartBeatIdx <= 1) return;
+    setLoopByBeats(loopStartBeatIdx, loopEndBeatIdx - 1);
+    if (isPlaying && loopEnabled) { startOffset = loopStart; startSources(); }
+  });
+
+  // + — add 1 beat to loop
+  document.getElementById("btn-loop-expand")?.addEventListener("click", () => {
+    if (loopEndBeatIdx >= beats.length - 1) return;
+    setLoopByBeats(loopStartBeatIdx, loopEndBeatIdx + 1);
+    if (isPlaying && loopEnabled) { startOffset = loopStart; startSources(); }
+  });
+
+  // Click on beats canvas — 3-phase: set start → set end → clear
   document.getElementById("beats-wrap")?.addEventListener("click", (e) => {
     const wrap = e.currentTarget;
     const pct  = (e.clientX - wrap.getBoundingClientRect().left) / wrap.clientWidth;
     const t    = Math.max(0, Math.min(pct * duration, duration));
-    if (e.shiftKey) {
-      loopEnd = t;
-      if (loopEnd <= loopStart) loopStart = 0;
+    const idx  = nearestBeatIdx(t);
+    const snapped = idx >= 0 ? beats[idx] : t;
+
+    if (beatsClickPhase === 2) {
+      // 3rd click — clear loop entirely
+      loopEnabled      = false;
+      loopStartBeatIdx = -1;
+      loopEndBeatIdx   = -1;
+      beatsClickPhase  = 0;
+      document.getElementById("btn-loop-toggle")?.classList.remove("active");
+      if (isPlaying) { startOffset = now(); startSources(); }
+    } else if (beatsClickPhase === 1 && idx > loopStartBeatIdx) {
+      // 2nd click after a valid start — close the loop
+      loopEndBeatIdx = idx;
+      loopEnd        = snapped;
+      loopEnabled    = true;
+      beatsClickPhase = 2;
+      document.getElementById("btn-loop-toggle")?.classList.add("active");
+      startOffset = loopStart;
+      if (isPlaying) startSources(); else paintUI(startOffset);
     } else {
-      loopStart = t;
-      if (loopEnd <= loopStart) loopEnd = duration;
+      // 1st click (or reset) — set loop start, seek cursor to that beat
+      loopStartBeatIdx = idx >= 0 ? idx : 0;
+      loopStart        = snapped;
+      loopEndBeatIdx   = -1;
+      loopEnabled      = false;
+      beatsClickPhase  = 1;
+      document.getElementById("btn-loop-toggle")?.classList.remove("active");
+      startOffset = loopStart;
+      $seekBar.value = startOffset;
+      if (isPlaying) startSources(); else paintUI(startOffset);
     }
+
+    updateBeatCount();
     updateLoopUI();
-    if (isPlaying && loopEnabled) { startOffset = now(); startSources(); }
   });
 }
 
@@ -386,6 +512,7 @@ function updateLoopUI() {
     el.style.width = `${(pctE - pctS) * 100}%`;
     el.classList.toggle("visible", loopEnabled);
   });
+  updateBeatCount();
 }
 
 function updateBpm() {
@@ -440,7 +567,7 @@ function pauseAll() {
   stopSources();
   clearTimeout(endTimer);
   isPlaying = false;
-  $playBtn.textContent = "▶";
+  $playBtn.innerHTML = SVG_PLAY;
   cancelAnimationFrame(rafId);
   paintUI(startOffset);
 }
@@ -454,7 +581,14 @@ function stopSources() {
 
 function now() {
   if (!isPlaying) return startOffset;
-  return Math.min(startOffset + (audioCtx.currentTime - startedAt) * playbackRate, duration);
+  const elapsed = (audioCtx.currentTime - startedAt) * playbackRate;
+  if (loopEnabled && loopEnd > loopStart) {
+    const raw = startOffset + elapsed;
+    if (raw < loopEnd) return raw;
+    const loopLen = loopEnd - loopStart;
+    return loopStart + ((raw - loopEnd) % loopLen);
+  }
+  return Math.min(startOffset + elapsed, duration);
 }
 
 // ── Animation loop ─────────────────────────────────────────────────

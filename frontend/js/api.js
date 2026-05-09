@@ -13,7 +13,8 @@ async function request(path, options = {}) {
   return res.json();
 }
 
-export const getModels   = ()     => request(`${BASE}/models`);
+export const getModels     = ()     => request(`${BASE}/models`);
+export const getBeatModels = ()     => request(`${BASE}/beat-models`);
 export const getProjects = ()     => request(BASE);
 export const getProject  = (id)   => request(`${BASE}/${id}`);
 export const createProject = (d)  => request(BASE, { method: "POST", body: JSON.stringify(d) });

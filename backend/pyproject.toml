@@ -16,6 +16,7 @@ dependencies = [
     "onnxruntime",
     "torch>=2.0.0",
     "torchaudio",
+    "beat-this>=0.2.0",
 ]
 
 # PyTorch is pulled from the nightly cu128 index (supports all GPUs ≥ RTX 20xx,

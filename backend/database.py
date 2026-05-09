@@ -21,9 +21,10 @@ def _migrate():
     """Add columns introduced after initial schema creation."""
     with engine.connect() as conn:
         for stmt in [
-            "ALTER TABLE projects ADD COLUMN model_id  VARCHAR NOT NULL DEFAULT 'htdemucs'",
-            "ALTER TABLE projects ADD COLUMN bpm        REAL",
-            "ALTER TABLE projects ADD COLUMN beats_json TEXT",
+            "ALTER TABLE projects ADD COLUMN model_id      VARCHAR NOT NULL DEFAULT 'htdemucs'",
+            "ALTER TABLE projects ADD COLUMN beat_model_id VARCHAR NOT NULL DEFAULT 'librosa'",
+            "ALTER TABLE projects ADD COLUMN bpm           REAL",
+            "ALTER TABLE projects ADD COLUMN beats_json    TEXT",
         ]:
             try:
                 conn.execute(text(stmt))
